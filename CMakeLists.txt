@@ -64,19 +64,35 @@ endif()
 set(SOURCES
     src/main.cpp
     src/core/app.cpp
-    src/core/calculator.cpp
     src/ui/main_window.cpp
     src/ui/button_panel.cpp
     src/utils/helpers.cpp
 )
 
+set(HEADERS
+	${CMAKE_CURRENT_SOURCE_DIR}/include
+	${CMAKE_CURRENT_SOURCE_DIR}/include/core
+	${CMAKE_CURRENT_SOURCE_DIR}/include/ui
+	${CMAKE_CURRENT_SOURCE_DIR}/include/utils
+)
+
+set(HEADERS_FILES
+	${CMAKE_CURRENT_SOURCE_DIR}/include/core/app.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/ui/button_panel.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/ui/main_window.h
+	${CMAKE_CURRENT_SOURCE_DIR}/include/utils/helpers.h
+)
+
+source_group("Headers files" FILES ${HEADERS_FILES})
+
+
 #======================================================================
 #===================== CREATING AN EXECUTABLE FILE ====================
 #======================================================================
 if(WIN32)
-	add_executable(${PROJECT_NAME} WIN32 ${SOURCES})
+	add_executable(${PROJECT_NAME} WIN32 ${HEADERS_FILES} ${SOURCES})
 else()
-	add_executable(${PROJECT_NAME} ${SOURCES})
+	add_executable(${PROJECT_NAME} ${HEADERS_FILES} ${SOURCES})
 endif()
 	
 #======================================================================
@@ -84,10 +100,8 @@ endif()
 #======================================================================
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-	${CMAKE_CURRENT_SOURCE_DIR}/include
-	${CMAKE_CURRENT_SOURCE_DIR}/include/core
-	${CMAKE_CURRENT_SOURCE_DIR}/include/ui
-	${CMAKE_CURRENT_SOURCE_DIR}/include/utils
+
+	${HEADERS}
 	${wxWidgets_INCLUDE_DIRS}
 )
 

@@ -3,18 +3,17 @@
 
 bool CalculatorApp::OnInit()
 {
-	MainWindow::CreateInstance();
-	MainWindow& mainWindow = MainWindow::GetInstance();
+	MainWindow* mainWindow = new MainWindow(nullptr, wxID_ANY, "Modern Calculator",
+		wxDefaultPosition, wxSize(400, 600));
 
-	mainWindow.Show(true);
+	mainWindow->Show(true);
 
-	SetTopWindow(&mainWindow);
+	SetTopWindow(mainWindow);
 	
 	return true;
 }
 
 int CalculatorApp::OnExit()
 {
-	MainWindow::DestroyInstance();
 	return wxApp::OnExit();
 }

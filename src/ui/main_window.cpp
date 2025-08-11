@@ -1,318 +1,296 @@
 #include "ui/main_window.h"
-#include "wx/artprov.h"
-#include "wx/display.h"
+#include <wx/msgdlg.h>
+#include <wx/menu.h>
 
-std::unique_ptr<MainWindow> MainWindow::instance_ = nullptr;
-
-MainWindow& MainWindow::GetInstance()
+MainWindow::MainWindow(wxWindow* parent, wxWindowID id, const wxString& title,
+    const wxPoint& pos, const wxSize& size)
+    : wxFrame(parent, id, title, pos, size)
+    , m_display(nullptr)
+    , m_mainPanel(nullptr)
+    , m_statusLabel(nullptr)
+    , m_isDarkTheme(false)
+    , m_isFullscreen(false)
+    , m_waitingForOperand(true)
+    , m_hasDecimal(false)
 {
-	if (!instance_)
-	{
-		CreateInstance();
-	}
+    SetMinSize(wxSize(MIN_WIDTH, MIN_HEIGHT));
 
-	return *instance_;
-}
+    CreateMenuBar();
+    CreateUI();
+    SetupLayout();
+    SetupEventHandlers();
+    ApplyModernStyle();
 
-void MainWindow::CreateInstance()
-{
-	if (!instance_)
-	{
-		instance_ = std::unique_ptr<MainWindow>(new MainWindow());
-	}
-}
+    Centre();
 
-void MainWindow::DestroyInstance()
-{
-	instance_.reset();
-}
-
-MainWindow::MainWindow()
-	:wxFrame(nullptr, wxID_ANY, "Modern Calculator",
-		wxDefaultPosition, wxSize(450, 600),
-		wxDEFAULT_FRAME_STYLE)
-	, display_(nullptr)
-	, mainPanel_(nullptr)
-	, statusLabel_(nullptr)
-	, isDarkTheme_(true)
-	, isFullscreen_(false)
-{
-	CreateMenuBar();
-	CreateUI();
-	SetupLayout();
-	SetupEventHandlers();
-	ApplyModernStyle();
-
-	CenterOnScreen();
-
-	SetMinSize(wxSize(350, 500));
-
-	SetIcon(wxArtProvider::GetIcon(wxART_EXECUTABLE_FILE, wxART_FRAME_ICON));
-}
-
-void MainWindow::CreateMenuBar()
-{
-	auto menuBar = std::make_unique<wxMenuBar>();
-
-	auto fileMenu = std::make_unique<wxMenu>();
-	fileMenu->Append(ID_FULLSCREEN, "&Fullscreen\tF11", "Toggle fullscreen mode");
-	fileMenu->AppendSeparator();
-	fileMenu->Append(ID_EXIT, "E&xit\tCtrl+Q", "Exit the application");
-
-	auto viewMenu = std::make_unique<wxMenu>();
-	viewMenu->AppendCheckItem(ID_THEME_TOGGLE, "$Dark Theme\tCtrl+T", "Toggle dark/light theme");
-	viewMenu->Check(ID_THEME_TOGGLE, isDarkTheme_);
-
-	auto helpMenu = std::make_unique<wxMenu>();
-	helpMenu->Append(ID_ABOUT, "&About\tF1", "Show about dialog");
-
-	menuBar->Append(fileMenu.release(), "&File");
-	menuBar->Append(viewMenu.release(), "&View");
-	menuBar->Append(helpMenu.release(), "&Help");
-
+    if (m_display) 
+    {
+        m_display->SetFocus();
+    }
 }
 
 void MainWindow::CreateUI()
 {
-	mainPanel_ = new wxPanel(this, wxID_ANY);
+    m_mainPanel = new wxPanel(this, wxID_ANY);
+    m_mainPanel->SetBackgroundColour(wxColour(240, 240, 240));
 
-	display_ = new wxTextCtrl(mainPanel_, wxID_ANY, "0",
-		wxDefaultPosition, wxDefaultSize,
-		wxTE_RIGHT | wxTE_READONLY | wxBORDER_SIMPLE);
+    m_display = new wxTextCtrl(m_mainPanel, wxID_ANY, "0",
+        wxDefaultPosition, wxSize(-1, DISPLAY_HEIGHT),
+        wxTE_RIGHT | wxTE_READONLY | wxBORDER_NONE);
 
-	statusLabel_ = new wxStaticText(mainPanel_, wxID_ANY, "Ready",
-		wxDefaultPosition, wxDefaultSize,
-		wxALIGN_CENTER_HORIZONTAL);
+    wxFont displayFont = m_display->GetFont();
+    displayFont.SetPointSize(24);
+    displayFont.SetWeight(wxFONTWEIGHT_LIGHT);
+    m_display->SetFont(displayFont);
+    m_display->SetBackgroundColour(wxColour(50, 50, 50));
+    m_display->SetForegroundColour(wxColour(255, 255, 255));
+
+    m_buttonPanel = std::make_unique<ButtonPanel>(m_mainPanel);
+
+    m_statusLabel = new wxStaticText(m_mainPanel, wxID_ANY, "Ready",
+        wxDefaultPosition, wxSize(-1, STATUS_HEIGHT),
+        wxALIGN_LEFT);
+    m_statusLabel->SetBackgroundColour(wxColour(240, 240, 240));
 }
 
 void MainWindow::SetupLayout()
 {
-	auto mainSizer = std::make_unique<wxBoxSizer>(wxVERTICAL);
+    auto* mainSizer = new wxBoxSizer(wxVERTICAL);
 
-	mainSizer->Add(display_, 0, wxEXPAND | wxLEFT | wxBOTTOM, 20);
+    mainSizer->Add(m_display, 0, wxEXPAND | wxALL, 10);
 
-	//mainSizer->Add(buttonPanel_, 1, wxExpand | wxLeft | wxRight, 20);
+    mainSizer->Add(m_buttonPanel.get(), 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
 
-	mainSizer->AddStretchSpacer(1);
+    mainSizer->Add(m_statusLabel, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 5);
 
-	mainSizer->Add(statusLabel_, 0, wxEXPAND | wxALL, 10);
+    m_mainPanel->SetSizer(mainSizer);
 
-	mainPanel_->SetSizer(mainSizer.release());
+    auto* frameSizer = new wxBoxSizer(wxVERTICAL);
+    frameSizer->Add(m_mainPanel, 1, wxEXPAND);
+    SetSizer(frameSizer);
 }
 
 void MainWindow::SetupEventHandlers()
 {
-	Bind(wxEVT_MENU, &MainWindow::OnExit, this, ID_EXIT);
-	Bind(wxEVT_MENU, &MainWindow::OnAbout, this, ID_ABOUT);
-	Bind(wxEVT_MENU, &MainWindow::OnThemeToggle, this, ID_THEME_TOGGLE);
-	Bind(wxEVT_MENU, &MainWindow::OnFullScreen, this, ID_FULLSCREEN);
+    Bind(EVT_CALC_NUMBER, &MainWindow::OnNumber, this);
+    Bind(EVT_CALC_OPERATOR, &MainWindow::OnOperator, this);
+    Bind(EVT_CALC_EQUALS, &MainWindow::OnEquals, this);
+    Bind(EVT_CALC_CLEAR, &MainWindow::OnClear, this);
+    Bind(EVT_CALC_CLEAR_ENTRY, &MainWindow::OnClearEntry, this);
+    Bind(EVT_CALC_DECIMAL, &MainWindow::OnDecimal, this);
+    Bind(EVT_CALC_BACKSPACE, &MainWindow::OnBackspace, this);
 
-	Bind(wxEVT_CLOSE_WINDOW, &MainWindow::OnClose, this);
+    Bind(wxEVT_CLOSE_WINDOW, &MainWindow::OnClose, this);
+    Bind(wxEVT_KEY_DOWN, &MainWindow::OnKeyDown, this);
+    Bind(wxEVT_SIZE, &MainWindow::OnSize, this);
 
-	Bind(wxEVT_KEY_DOWN, &MainWindow::OnKeyDown, this);
-
-	Bind(wxEVT_SIZE, [this](wxSizeEvent& event)
-		{
-			SetStatusMessage("Window resized to " +
-				std::to_string(event.GetSize().GetWidth()) + "x" +
-				std::to_string(event.GetSize().GetHeight()));
-
-			event.Skip();
-		});
-
-	Bind(wxEVT_ACTIVATE, [this](wxActivateEvent& event)
-		{
-			if (event.GetActive())
-			{
-				SetStatusMessage("Calculator activated");
-			}
-			else
-			{
-				SetStatusMessage("Calculator deactivated");
-			}
-
-			event.Skip();
-		});
-
-	if (display_)
-	{
-		display_->Bind(wxEVT_SET_FOCUS, [this](wxFocusEvent& event)
-			{
-				SetStatusMessage("Display focused");
-				event.Skip();
-			});
-
-		display_->Bind(wxEVT_KILL_FOCUS, [this](wxFocusEvent& event)
-			{
-				SetStatusMessage("Display unfocused");
-				event.Skip();
-			});
-	}
-	
+    Bind(wxEVT_MENU, &MainWindow::OnAbout, this, ID_ABOUT);
+    Bind(wxEVT_MENU, &MainWindow::OnExit, this, ID_EXIT);
+    Bind(wxEVT_MENU, &MainWindow::OnThemeToggle, this, ID_THEME_TOGGLE);
+    Bind(wxEVT_MENU, &MainWindow::OnFullScreen, this, ID_FULLSCREEN);
 }
 
-void MainWindow::ApplyModernStyle()
+void MainWindow::OnNumber(wxCommandEvent& event)
 {
-	SetDarkTheme(isDarkTheme_);
+    wxString number = event.GetString();
 
-	wxFont displayFont(20, wxFONTFAMILY_MODERN, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_LIGHT);
-	display_->SetFont(displayFont);
-	
-	wxFont statusFont(9, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
-	statusLabel_->SetFont(statusFont);
+    if (m_waitingForOperand) 
+    {
+        m_currentNumber = number;
+        m_waitingForOperand = false;
+        m_hasDecimal = false;
+    }
+    else 
+    {
+        if (m_currentNumber == "0") 
+        {
+            m_currentNumber = number;
+        }
+        else 
+        {
+            m_currentNumber += number;
+        }
+    }
+
+    UpdateDisplay(m_currentNumber);
+    SetStatusMessage("Number input: " + number);
 }
 
-void MainWindow::SetDarkTheme(bool dark)
+void MainWindow::OnOperator(wxCommandEvent& event)
 {
-	isDarkTheme_ = dark;
+    wxString op = event.GetString();
 
-	if (dark)
-	{
-		wxColor bgColor(45, 45, 48);
-		wxColor fgColor(255, 255, 255);
-		wxColor displayBg(30, 30, 30);
+    if (!m_waitingForOperand) 
+    {
+ 
+        if (!m_currentOperator.IsEmpty() && !m_previousNumber.IsEmpty()) 
+        {
+            OnEquals(event);  
+        }
+        else 
+        {
+            m_previousNumber = m_currentNumber;
+        }
+    }
 
-		SetBackgroundColour(bgColor);
-		mainPanel_->SetBackgroundColour(bgColor);
-		mainPanel_->SetForegroundColour(fgColor);
+    m_currentOperator = op;
+    m_waitingForOperand = true;
 
-		display_->SetBackgroundColour(displayBg);
-		display_->SetForegroundColour(fgColor);
-
-		statusLabel_->SetForegroundColour(wxColor(170, 170, 170));
-	}
-	else
-	{
-		wxColour bgColor(248, 248, 248);
-		wxColour fgColor(0, 0, 0);
-		wxColour displayBg(255, 255, 255);
-
-		SetBackgroundColour(bgColor);
-		mainPanel_->SetBackgroundColour(bgColor);
-		mainPanel_->SetForegroundColour(fgColor);
-
-		display_->SetBackgroundColour(displayBg);
-		display_->SetForegroundColour(fgColor);
-
-		statusLabel_->SetForegroundColour(wxColour(100, 100, 100));
-	}
-
-	Refresh();
+    SetStatusMessage("Operator: " + op);
 }
 
-void MainWindow::UpdateDisplay(const std::string& value)
+void MainWindow::OnEquals(wxCommandEvent& event)
 {
-	if (display_)
-	{
-		display_->SetValue(wxString(value));
-	}
+    if (m_currentOperator.IsEmpty() || m_previousNumber.IsEmpty()) {
+        return;
+    }
+
+    double prev = 0.0, curr = 0.0, result = 0.0;
+
+    if (!m_previousNumber.ToDouble(&prev) || !m_currentNumber.ToDouble(&curr)) {
+        SetDisplayError("Error");
+        return;
+    }
+
+    if (m_currentOperator == "+") 
+    {
+        result = prev + curr;
+    }
+    else if (m_currentOperator == "-") 
+    {
+        result = prev - curr;
+    }
+    else if (m_currentOperator == "*") 
+    {
+        result = prev * curr;
+    }
+    else if (m_currentOperator == "/") 
+    {
+        if (curr == 0.0) {
+            SetDisplayError("Division by zero");
+            return;
+        }
+        result = prev / curr;
+    }
+
+    m_currentNumber = wxString::Format("%.10g", result);
+    UpdateDisplay(m_currentNumber);
+
+    m_previousNumber.Clear();
+    m_currentOperator.Clear();
+    m_waitingForOperand = true;
+
+    SetStatusMessage("Calculation completed");
 }
 
-void MainWindow::SetStatusMessage(const std::string& message)
+void MainWindow::OnClear(wxCommandEvent& event)
 {
-	if (statusLabel_) 
-	{
-		statusLabel_->SetLabel(wxString(message));
+    m_currentNumber = "0";
+    m_previousNumber.Clear();
+    m_currentOperator.Clear();
+    m_waitingForOperand = true;
+    m_hasDecimal = false;
 
-		
-		wxTimer* timer = new wxTimer();
-		timer->Bind(wxEVT_TIMER, [this, timer](wxTimerEvent&) 
-			{
-			SetStatusMessage("Ready");
-			delete timer;
-			});
+    UpdateDisplay(m_currentNumber);
+    SetStatusMessage("Cleared");
+}
 
-		timer->StartOnce(3000);
-	}
+void MainWindow::OnClearEntry(wxCommandEvent& event)
+{
+    m_currentNumber = "0";
+    m_hasDecimal = false;
+    UpdateDisplay(m_currentNumber);
+    SetStatusMessage("Entry cleared");
+}
+
+void MainWindow::OnDecimal(wxCommandEvent& event)
+{
+    if (m_waitingForOperand) 
+    {
+        m_currentNumber = "0.";
+        m_waitingForOperand = false;
+        m_hasDecimal = true;
+    }
+    else if (!m_hasDecimal) 
+    {
+        m_currentNumber += ".";
+        m_hasDecimal = true;
+    }
+
+    UpdateDisplay(m_currentNumber);
+}
+
+void MainWindow::OnBackspace(wxCommandEvent& event)
+{
+    if (m_currentNumber.Length() > 1) {
+        if (m_currentNumber.Last() == '.') 
+        {
+            m_hasDecimal = false;
+        }
+        m_currentNumber = m_currentNumber.Left(m_currentNumber.Length() - 1);
+    }
+    else 
+    {
+        m_currentNumber = "0";
+        m_hasDecimal = false;
+    }
+
+    UpdateDisplay(m_currentNumber);
+}
+
+void MainWindow::UpdateDisplay(const wxString& value)
+{
+    if (m_display) 
+    {
+        m_display->SetValue(value);
+    }
+}
+
+void MainWindow::SetStatusMessage(const wxString& message)
+{
+    if (m_statusLabel) 
+    {
+        m_statusLabel->SetLabel(message);
+    }
+}
+
+void MainWindow::SetDisplayError(const wxString& errorMsg)
+{
+    UpdateDisplay(errorMsg);
+    SetStatusMessage("Error occurred");
+
+    m_currentNumber = "0";
+    m_previousNumber.Clear();
+    m_currentOperator.Clear();
+    m_waitingForOperand = true;
+    m_hasDecimal = false;
 }
 
 void MainWindow::OnExit(wxCommandEvent& event)
 {
-	Close(true);
+    Close(true);
 }
 
 void MainWindow::OnAbout(wxCommandEvent& event)
 {
-	wxString aboutText = wxString::Format(
-		"Modern Calculator v1.0\n\n"
-		"Built with wxWidgets %d.%d.%d\n"
-		"Architecture: %s\n"
-		"Compiled: %s %s\n\n"
-		"Features:\n"
-		"• Singleton pattern architecture\n"
-		"• Modern event handling with Bind()\n"
-		"• Dark/Light theme support\n"
-		"• Smart pointer usage\n"
-		"• Lambda functions for simple events\n"
-		"• Responsive design",
-		wxMAJOR_VERSION, wxMINOR_VERSION, wxRELEASE_NUMBER,
-#ifdef __x86_64__
-		"x64"
-#else
-		"x86"
-#endif
-		, __DATE__, __TIME__
-	);
-
-	wxMessageBox(aboutText, "About Modern Calculator",
-		wxOK | wxICON_INFORMATION | wxCENTRE);
-}
-
-void MainWindow::OnThemeToggle(wxCommandEvent& event)
-{
-	SetDarkTheme(!isDarkTheme_);
-	SetStatusMessage(isDarkTheme_ ? "Switched to dark theme" : "Switched to light theme");
-}
-
-void MainWindow::OnFullScreen(wxCommandEvent& event)
-{
-	isFullscreen_ = !isFullscreen_;
-	ShowFullScreen(isFullscreen_);
-	SetStatusMessage(isFullscreen_ ? "Entered fullscreen mode" : "Exited fullscreen mode");
-}
-
-void MainWindow::OnKeyDown(wxKeyEvent& event)
-{
-	int keyCode = event.GetKeyCode();
-
-	if (event.ControlDown()) 
-	{
-		switch (keyCode) {
-		case 'Q':
-			Close(true);
-			return;
-		case 'T':
-			SetDarkTheme(!isDarkTheme_);
-			return;
-		}
-	}
-
-	if (keyCode == WXK_F11) 
-	{
-		OnFullScreen(wxCommandEvent{});
-		return;
-	}
-
-	if (keyCode == WXK_F1) 
-	{
-		OnAbout(wxCommandEvent{});
-		return;
-	}
-
-	event.Skip();
+    wxMessageBox("Modern Calculator\nBuilt with wxWidgets and C++",
+        "About Calculator", wxOK | wxICON_INFORMATION);
 }
 
 void MainWindow::OnClose(wxCloseEvent& event)
 {
-	SetStatusMessage("Closing application...");
-
-	if (event.CanVeto())
-	{
-		Hide();
-	}
-	else
-	{
-		DestroyInstance();
-		Destroy();
-	}
+    Destroy();
 }
+
+void MainWindow::OnSize(wxSizeEvent& event)
+{
+    Layout();
+    event.Skip();
+}
+
+void MainWindow::CreateMenuBar() {  }
+void MainWindow::OnThemeToggle(wxCommandEvent& event) {  }
+void MainWindow::OnFullScreen(wxCommandEvent& event) { }
+void MainWindow::OnKeyDown(wxKeyEvent& event) { }
+void MainWindow::ApplyModernStyle() { }
+void MainWindow::SetDarkTheme(bool dark) {  }
