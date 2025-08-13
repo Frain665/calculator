@@ -288,9 +288,33 @@ void MainWindow::OnSize(wxSizeEvent& event)
     event.Skip();
 }
 
-void MainWindow::CreateMenuBar() {  }
-void MainWindow::OnThemeToggle(wxCommandEvent& event) {  }
-void MainWindow::OnFullScreen(wxCommandEvent& event) { }
-void MainWindow::OnKeyDown(wxKeyEvent& event) { }
-void MainWindow::ApplyModernStyle() { }
-void MainWindow::SetDarkTheme(bool dark) {  }
+void MainWindow::CreateMenuBar() 
+{ /* Это ты напишешь сам  */ 
+
+}
+
+
+void MainWindow::OnThemeToggle(wxCommandEvent& event) 
+{ /* и это */ 
+
+}
+
+void MainWindow::OnFullScreen(wxCommandEvent& event) 
+{ /* и это */ 
+
+}
+
+void MainWindow::OnKeyDown(wxKeyEvent& event) 
+{ /* и это */ 
+
+}
+
+void MainWindow::ApplyModernStyle() 
+{ /* и это */ 
+
+}
+
+void MainWindow::SetDarkTheme(bool dark) 
+{ /* и это тоже, тебе всё равно делать нехуй */  
+
+}
